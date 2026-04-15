@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StudyFlow — Planificateur de révisions</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&family=Spectral:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0d0f14;--surface:#13161e;--surface2:#1a1e28;--surface3:#222737;
+    --border:#2a2f42;--accent:#7c6af7;--accent2:#f7c26a;--accent3:#6af7c8;
+    --danger:#f76a7c;--text:#e8eaf0;--muted:#6b7194;--muted2:#9399b8;
+    --radius:12px;--radius-sm:8px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Spectral',serif;min-height:100vh;overflow-x:hidden;}
+  body::before{content:'';position:fixed;top:-200px;left:-200px;width:600px;height:600px;background:radial-gradient(circle,rgba(124,106,247,0.08) 0%,transparent 70%);pointer-events:none;z-index:0;}
+  body::after{content:'';position:fixed;bottom:-150px;right:-150px;width:500px;height:500px;background:radial-gradient(circle,rgba(247,194,106,0.06) 0%,transparent 70%);pointer-events:none;z-index:0;}
+
+  /* AUTH */
+  #authScreen{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;}
+  #authScreen.hidden{display:none;}
+  .auth-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:48px 40px;text-align:center;max-width:420px;width:90%;}
+  .auth-logo{font-family:'Syne',sans-serif;font-weight:800;font-size:2.2rem;letter-spacing:-1px;margin-bottom:4px;}
+  .auth-logo span{color:var(--accent);}
+  .auth-sub{font-family:'DM Mono',monospace;font-size:0.7rem;color:var(--accent);letter-spacing:2px;text-transform:uppercase;margin-bottom:32px;}
+  .auth-desc{font-size:0.9rem;color:var(--muted2);margin-bottom:28px;line-height:1.6;}
+  .btn-google{display:inline-flex;align-items:center;gap:12px;background:#fff;color:#1f1f1f;border:none;border-radius:8px;padding:13px 24px;font-family:'Syne',sans-serif;font-weight:700;font-size:0.9rem;cursor:pointer;transition:all 0.2s;box-shadow:0 2px 12px rgba(0,0,0,0.3);}
+  .btn-google:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.4);}
+  .btn-google svg{width:20px;height:20px;flex-shrink:0;}
+  .auth-note{font-family:'DM Mono',monospace;font-size:0.65rem;color:var(--muted);margin-top:16px;display:none;}
+
+  /* LOADING */
+  #loadingOverlay{position:fixed;inset:0;background:var(--bg);z-index:8888;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;}
+  #loadingOverlay.hidden{display:none;}
+  .spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .loading-txt{font-family:'DM Mono',monospace;font-size:0.75rem;color:var(--muted2);letter-spacing:1px;}
+
+  /* LAYOUT */
+  .app{display:flex;min-height:100vh;position:relative;z-index:1;}
+  .sidebar{width:260px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;transition:transform 0.3s ease;}
+  .main{margin-left:260px;flex:1;padding:32px;min-height:100vh;}
+
+  /* SIDEBAR */
+  .logo{padding:24px 24px 16px;border-bottom:1px solid var(--border);}
+  .logo-title{font-family:'Syne',sans-serif;font-weight:800;font-size:1.4rem;letter-spacing:-0.5px;}
+  .logo-sub{font-family:'DM Mono',monospace;font-size:0.65rem;color:var(--accent);letter-spacing:2px;text-transform:uppercase;margin-top:2px;}
+  .user-bar{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface2);}
+  .user-avatar{width:30px;height:30px;border-radius:50%;object-fit:cover;border:2px solid var(--accent);}
+  .user-placeholder{width:30px;height:30px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:0.78rem;color:#fff;flex-shrink:0;}
+  .user-info{flex:1;min-width:0;}
+  .user-name{font-family:'Syne',sans-serif;font-weight:700;font-size:0.76rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .user-email{font-family:'DM Mono',monospace;font-size:0.6rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .btn-signout{background:none;border:none;cursor:pointer;color:var(--muted);font-size:0.85rem;padding:4px;border-radius:4px;transition:0.2s;flex-shrink:0;}
+  .btn-signout:hover{color:var(--danger);background:rgba(247,106,124,0.1);}
+  .nav{padding:16px 12px;flex:1;}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:var(--radius-sm);cursor:pointer;font-family:'Syne',sans-serif;font-size:0.85rem;font-weight:600;color:var(--muted2);transition:all 0.2s;margin-bottom:2px;}
+  .nav-item:hover{background:var(--surface2);color:var(--text);}
+  .nav-item.active{background:var(--surface3);color:var(--text);}
+  .nav-item.active .nav-dot{background:var(--accent);}
+  .nav-dot{width:6px;height:6px;border-radius:50%;background:var(--muted);transition:0.2s;}
+  .nav-icon{font-size:1rem;width:20px;text-align:center;}
+  .sidebar-bottom{padding:14px;border-top:1px solid var(--border);}
+  .today-pill{background:var(--surface2);border-radius:var(--radius-sm);padding:10px 14px;font-family:'DM Mono',monospace;font-size:0.72rem;color:var(--accent3);letter-spacing:0.5px;}
+  .sync-bar{display:flex;align-items:center;gap:5px;margin-top:6px;font-family:'DM Mono',monospace;font-size:0.62rem;color:var(--muted);}
+  .sync-dot{width:5px;height:5px;border-radius:50%;background:var(--accent3);}
+  .sync-dot.syncing{background:var(--accent2);animation:pulse 1s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+
+  /* COMMON UI */
+  .page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:32px;flex-wrap:wrap;gap:12px;}
+  .page-title{font-family:'Syne',sans-serif;font-weight:800;font-size:2rem;letter-spacing:-1px;}
+  .page-title span{color:var(--accent);}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:20px;}
+  .card-title{font-family:'Syne',sans-serif;font-weight:700;font-size:0.85rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted2);margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:10px 18px;border-radius:var(--radius-sm);border:none;cursor:pointer;font-family:'Syne',sans-serif;font-weight:600;font-size:0.82rem;letter-spacing:0.3px;transition:all 0.2s;}
+  .btn-primary{background:var(--accent);color:#fff;}.btn-primary:hover{background:#6b59e8;transform:translateY(-1px);}
+  .btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border);}.btn-secondary:hover{background:var(--surface3);}
+  .btn-success{background:rgba(106,247,200,0.15);color:var(--accent3);border:1px solid rgba(106,247,200,0.25);}.btn-success:hover{background:rgba(106,247,200,0.25);}
+  .btn-danger{background:rgba(247,106,124,0.15);color:var(--danger);border:1px solid rgba(247,106,124,0.25);}.btn-danger:hover{background:rgba(247,106,124,0.25);}
+  .btn-sm{padding:6px 12px;font-size:0.75rem;}
+  .badge{display:inline-block;padding:3px 9px;border-radius:20px;font-family:'DM Mono',monospace;font-size:0.68rem;font-weight:500;}
+  .badge-accent{background:rgba(124,106,247,0.2);color:var(--accent);}
+  .badge-gold{background:rgba(247,194,106,0.15);color:var(--accent2);}
+  .badge-teal{background:rgba(106,247,200,0.15);color:var(--accent3);}
+  .badge-red{background:rgba(247,106,124,0.15);color:var(--danger);}
+  .badge-muted{background:var(--surface2);color:var(--muted2);}
+  .input-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
+  input,select,textarea{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:'Spectral',serif;font-size:0.9rem;padding:9px 13px;outline:none;transition:border 0.2s;}
+  input:focus,select:focus,textarea:focus{border-color:var(--accent);}
+  input::placeholder{color:var(--muted);}
+  select option{background:var(--surface2);}
+  label{font-family:'Syne',sans-serif;font-size:0.78rem;font-weight:600;color:var(--muted2);display:block;margin-bottom:4px;}
+  .form-group{display:flex;flex-direction:column;gap:4px;flex:1;min-width:160px;}
+  .page{display:none;}.page.active{display:block;animation:fadeIn 0.25s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+  /* TODAY */
+  .today-subject-card{background:linear-gradient(135deg,var(--surface2) 0%,var(--surface3) 100%);border:1px solid var(--border);border-radius:var(--radius);padding:28px;margin-bottom:16px;position:relative;overflow:hidden;}
+  .today-subject-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--accent);}
+  .today-subject-name{font-family:'Syne',sans-serif;font-weight:800;font-size:1.6rem;margin-bottom:4px;letter-spacing:-0.5px;}
+  .today-subject-meta{font-family:'DM Mono',monospace;font-size:0.72rem;color:var(--muted2);letter-spacing:0.5px;}
+  .today-actions{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;}
+
+  /* SCHEDULE */
+  .schedule-list{display:flex;flex-direction:column;gap:10px;}
+  .schedule-item{display:flex;align-items:center;gap:14px;background:var(--surface2);border-radius:var(--radius-sm);padding:14px 18px;border-left:3px solid var(--border);transition:0.2s;}
+  .schedule-item.today-item{border-left-color:var(--accent);}
+  .schedule-item.done-item{border-left-color:var(--accent3);opacity:0.75;}
+  .schedule-item.missed-item{border-left-color:var(--danger);}
+  .schedule-date{font-family:'DM Mono',monospace;font-size:0.72rem;color:var(--muted2);width:80px;flex-shrink:0;}
+  .schedule-subject{font-family:'Syne',sans-serif;font-weight:700;font-size:0.9rem;flex:1;}
+
+  /* CALENDAR */
+  .cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
+  .cal-month{font-family:'Syne',sans-serif;font-weight:800;font-size:1.2rem;}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+  .cal-day-label{text-align:center;font-family:'DM Mono',monospace;font-size:0.65rem;color:var(--muted);padding:4px 0;letter-spacing:1px;}
+  .cal-day{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:var(--radius-sm);cursor:pointer;font-family:'Syne',sans-serif;font-size:0.8rem;font-weight:600;transition:0.15s;position:relative;padding:4px;background:var(--surface2);border:1px solid transparent;}
+  .cal-day:hover{border-color:var(--border);}
+  .cal-day.empty{background:transparent;cursor:default;}
+  .cal-day.today{border-color:var(--accent);color:var(--accent);}
+  .cal-day.has-event::after{content:'';position:absolute;bottom:4px;width:4px;height:4px;border-radius:50%;background:var(--accent2);}
+  .cal-day.done::after{background:var(--accent3);}
+  .cal-day.missed::after{background:var(--danger);}
+  .cal-day-subj{font-size:0.5rem;color:var(--muted2);margin-top:1px;text-align:center;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+
+  /* SUBJECTS */
+  .subjects-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;}
+  .subject-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:20px;position:relative;overflow:hidden;}
+  .subject-card-accent{height:3px;position:absolute;top:0;left:0;right:0;}
+  .subject-name{font-family:'Syne',sans-serif;font-weight:800;font-size:1rem;margin-bottom:6px;margin-top:8px;}
+  .subject-stats{font-family:'DM Mono',monospace;font-size:0.7rem;color:var(--muted2);}
+  .progress-bar{height:4px;background:var(--surface3);border-radius:2px;margin:10px 0;overflow:hidden;}
+  .progress-fill{height:100%;background:var(--accent);border-radius:2px;transition:0.3s;}
+
+  /* ASSIGNMENTS */
+  .assignment-list{display:flex;flex-direction:column;gap:10px;}
+  .assignment-item{display:flex;align-items:center;gap:14px;background:var(--surface2);border-radius:var(--radius-sm);padding:14px 18px;border:1px solid var(--border);}
+  .assignment-info{flex:1;}
+  .assignment-name{font-family:'Syne',sans-serif;font-weight:700;font-size:0.9rem;}
+  .assignment-meta{font-family:'DM Mono',monospace;font-size:0.7rem;color:var(--muted2);margin-top:2px;}
+  .assignment-actions{display:flex;gap:6px;flex-wrap:wrap;}
+
+  /* ALERTS */
+  .alert{display:flex;align-items:flex-start;gap:12px;background:rgba(247,106,124,0.08);border:1px solid rgba(247,106,124,0.25);border-radius:var(--radius-sm);padding:14px 16px;margin-bottom:12px;font-size:0.85rem;color:var(--danger);}
+  .alert-icon{font-size:1rem;flex-shrink:0;}
+  .alert-warn{background:rgba(247,194,106,0.08);border-color:rgba(247,194,106,0.25);color:var(--accent2);}
+
+  /* STATS */
+  .stats-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;margin-bottom:24px;}
+  .stat-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;text-align:center;}
+  .stat-num{font-family:'Syne',sans-serif;font-weight:800;font-size:1.8rem;color:var(--accent);}
+  .stat-label{font-family:'DM Mono',monospace;font-size:0.65rem;color:var(--muted2);letter-spacing:1px;text-transform:uppercase;margin-top:4px;}
+
+  /* HISTORY TABLE */
+  .hist-table{width:100%;border-collapse:collapse;}
+  .hist-table th{text-align:left;font-family:'DM Mono',monospace;font-size:0.65rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;padding:8px 12px;border-bottom:1px solid var(--border);}
+  .hist-table td{padding:10px 12px;font-size:0.85rem;border-bottom:1px solid rgba(42,47,66,0.5);}
+  .hist-table tr:last-child td{border-bottom:none;}
+
+  /* MODAL */
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);z-index:1000;align-items:center;justify-content:center;padding:20px;}
+  .modal-overlay.open{display:flex;}
+  .modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px;width:100%;max-width:500px;max-height:90vh;overflow-y:auto;animation:slideUp 0.25s ease;}
+  @keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+  .modal-title{font-family:'Syne',sans-serif;font-weight:800;font-size:1.1rem;margin-bottom:20px;}
+  .modal-actions{display:flex;gap:10px;margin-top:20px;justify-content:flex-end;}
+  .exception-note{background:rgba(247,194,106,0.08);border:1px solid rgba(247,194,106,0.2);border-radius:var(--radius-sm);padding:12px 16px;font-size:0.82rem;color:var(--accent2);margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+
+  /* TOAST */
+  .toast-container{position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px;}
+  .toast{background:var(--surface3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 18px;font-family:'Syne',sans-serif;font-size:0.82rem;font-weight:600;display:flex;align-items:center;gap:8px;animation:slideInRight 0.3s ease,fadeOut 0.3s 2.7s forwards;box-shadow:0 4px 20px rgba(0,0,0,0.4);}
+  @keyframes slideInRight{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+  @keyframes fadeOut{to{opacity:0;transform:translateX(20px)}}
+
+  /* MOBILE */
+  .hamburger{display:none;position:fixed;top:16px;left:16px;z-index:200;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;cursor:pointer;font-size:1.1rem;}
+  .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99;}
+  @media(max-width:768px){
+    .sidebar{transform:translateX(-100%);}
+    .sidebar.open{transform:translateX(0);}
+    .sidebar-overlay.open{display:block;}
+    .main{margin-left:0;padding:20px 16px;padding-top:60px;}
+    .hamburger{display:block;}
+    .stats-row{grid-template-columns:1fr 1fr;}
+    .subjects-grid{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ░░ AUTH SCREEN ░░ -->
+<div id="authScreen">
+  <div class="auth-card">
+    <div class="auth-logo">Study<span>Flow</span></div>
+    <div class="auth-sub">Planificateur de révisions</div>
+    <div class="auth-desc">
+      Connecte-toi avec Google pour accéder à tes révisions depuis n'importe quel appareil. Tes données sont privées et synchronisées en temps réel.
+    </div>
+    <button class="btn-google" onclick="signInWithGoogle()">
+      <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+      Continuer avec Google
+    </button>
+    <div class="auth-note" id="authNote">Connexion en cours…</div>
+  </div>
+</div>
+
+<!-- ░░ LOADING ░░ -->
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-txt">Chargement de tes données…</div>
+</div>
+
+<!-- ░░ APP ░░ -->
+<button class="hamburger" onclick="toggleSidebar()">☰</button>
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="logo">
+      <div class="logo-title">StudyFlow</div>
+      <div class="logo-sub">Planificateur</div>
+    </div>
+    <div class="user-bar" id="userBar"></div>
+    <nav class="nav">
+      <div class="nav-item active"  onclick="showPage('today')">      <span class="nav-dot"></span><span class="nav-icon">📅</span> Aujourd'hui</div>
+      <div class="nav-item"        onclick="showPage('schedule')">    <span class="nav-dot"></span><span class="nav-icon">🔄</span> Rotation</div>
+      <div class="nav-item"        onclick="showPage('calendar')">    <span class="nav-dot"></span><span class="nav-icon">📆</span> Calendrier</div>
+      <div class="nav-item"        onclick="showPage('subjects')">    <span class="nav-dot"></span><span class="nav-icon">📚</span> Matières</div>
+      <div class="nav-item"        onclick="showPage('assignments')"> <span class="nav-dot"></span><span class="nav-icon">✏️</span> Devoirs &amp; Examens</div>
+      <div class="nav-item"        onclick="showPage('history')">     <span class="nav-dot"></span><span class="nav-icon">📊</span> Suivi</div>
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="today-pill" id="sidebarDate">— / — / —</div>
+      <div class="sync-bar"><div class="sync-dot" id="syncDot"></div><span id="syncLabel">Synchronisé ✓</span></div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <!-- TODAY -->
+    <div class="page active" id="page-today">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Aujourd'<span>hui</span></div>
+          <div style="font-family:'DM Mono',monospace;font-size:0.75rem;color:var(--muted2);margin-top:4px;" id="todayDateLabel"></div>
+        </div>
+        <button class="btn btn-secondary" onclick="openExceptionModal()">➕ Exception</button>
+      </div>
+      <div id="alertsContainer"></div>
+      <div id="todaySubjectBlock"></div>
+      <div id="todayAssignments"></div>
+    </div>
+
+    <!-- SCHEDULE -->
+    <div class="page" id="page-schedule">
+      <div class="page-header"><div class="page-title">Rotation <span>des révisions</span></div></div>
+      <div class="card"><div class="card-title">📋 Prochaines révisions (21 jours)</div><div class="schedule-list" id="scheduleList"></div></div>
+    </div>
+
+    <!-- CALENDAR -->
+    <div class="page" id="page-calendar">
+      <div class="page-header"><div class="page-title">Calen<span>drier</span></div></div>
+      <div class="card">
+        <div class="cal-header">
+          <button class="btn btn-secondary btn-sm" onclick="calPrev()">◀</button>
+          <div class="cal-month" id="calMonthLabel"></div>
+          <button class="btn btn-secondary btn-sm" onclick="calNext()">▶</button>
+        </div>
+        <div class="cal-grid" id="calGrid"></div>
+      </div>
+      <div class="card" id="calDayDetail" style="display:none">
+        <div class="card-title" id="calDayDetailTitle">Détails</div>
+        <div id="calDayDetailContent"></div>
+      </div>
+    </div>
+
+    <!-- SUBJECTS -->
+    <div class="page" id="page-subjects">
+      <div class="page-header">
+        <div class="page-title">Mes <span>Matières</span></div>
+        <button class="btn btn-primary" onclick="openSubjectModal()">+ Ajouter</button>
+      </div>
+      <div class="subjects-grid" id="subjectsGrid"></div>
+    </div>
+
+    <!-- ASSIGNMENTS -->
+    <div class="page" id="page-assignments">
+      <div class="page-header">
+        <div class="page-title">Devoirs &amp; <span>Examens</span></div>
+        <button class="btn btn-primary" onclick="openAssignmentModal()">+ Ajouter</button>
+      </div>
+      <div class="assignment-list" id="assignmentList"></div>
+    </div>
+
+    <!-- HISTORY -->
+    <div class="page" id="page-history">
+      <div class="page-header"><div class="page-title">Suivi &amp; <span>Statistiques</span></div></div>
+      <div class="stats-row" id="statsRow"></div>
+      <div class="card">
+        <div class="card-title">📋 Historique des révisions</div>
+        <div style="overflow-x:auto;">
+          <table class="hist-table">
+            <thead><tr><th>Date</th><th>Matière</th><th>Chapitre</th><th>Statut</th><th>Notes</th></tr></thead>
+            <tbody id="histBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- MODALS -->
+<div class="modal-overlay" id="subjectModal">
+  <div class="modal">
+    <div class="modal-title">Ajouter une matière</div>
+    <div class="form-group" style="margin-bottom:12px"><label>Nom</label><input id="subjectName" placeholder="ex: INF3173 Systèmes d'exploitation" style="width:100%"></div>
+    <div class="form-group" style="margin-bottom:12px"><label>Code / Abréviation</label><input id="subjectCode" placeholder="ex: OS" style="width:100%"></div>
+    <div class="form-group" style="margin-bottom:12px"><label>Couleur</label><input type="color" id="subjectColor" value="#7c6af7" style="width:60px;height:38px;padding:2px;"></div>
+    <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal('subjectModal')">Annuler</button><button class="btn btn-primary" onclick="addSubject()">Ajouter</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="assignmentModal">
+  <div class="modal">
+    <div class="modal-title">Ajouter un devoir / examen</div>
+    <div class="form-group" style="margin-bottom:12px"><label>Titre</label><input id="assignTitle" placeholder="ex: TP2, Examen intra, Quiz 3" style="width:100%"></div>
+    <div class="input-row">
+      <div class="form-group"><label>Type</label><select id="assignType"><option value="tp">Devoir/TP</option><option value="quiz">Quiz</option><option value="exam">Examen</option></select></div>
+      <div class="form-group"><label>Matière</label><select id="assignSubject"></select></div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px"><label>Date de remise</label><input type="date" id="assignDate" style="width:100%"></div>
+    <div class="form-group" style="margin-bottom:12px"><label>Notes (optionnel)</label><textarea id="assignNotes" style="width:100%;height:70px;resize:vertical;"></textarea></div>
+    <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal('assignmentModal')">Annuler</button><button class="btn btn-primary" onclick="addAssignment()">Ajouter</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="checkinModal">
+  <div class="modal">
+    <div class="modal-title" id="checkinModalTitle">Marquer la révision</div>
+    <div class="form-group" style="margin-bottom:12px"><label>Chapitre(s) révisé(s)</label><input id="checkinChapter" placeholder="ex: Ch3 - Synchronisation" style="width:100%"></div>
+    <div class="form-group" style="margin-bottom:12px"><label>Notes personnelles</label><textarea id="checkinNotes" style="width:100%;height:70px;resize:vertical;"></textarea></div>
+    <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal('checkinModal')">Annuler</button><button class="btn btn-danger" onclick="markMissed()">⚡ Pas révisé</button><button class="btn btn-success" onclick="markDone()">✓ Révisé !</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="exceptionModal">
+  <div class="modal">
+    <div class="modal-title">Révision exceptionnelle</div>
+    <div class="exception-note">⚠️ S'ajoute en plus de la révision planifiée.</div>
+    <div class="input-row">
+      <div class="form-group"><label>Matière</label><select id="exceptionSubject"></select></div>
+      <div class="form-group"><label>Date</label><input type="date" id="exceptionDate" style="width:100%"></div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px"><label>Chapitre(s)</label><input id="exceptionChapter" placeholder="ex: Révision examen intra" style="width:100%"></div>
+    <div class="form-group" style="margin-bottom:12px"><label>Notes</label><textarea id="exceptionNotes" style="width:100%;height:60px;resize:vertical;"></textarea></div>
+    <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal('exceptionModal')">Annuler</button><button class="btn btn-primary" onclick="addException()">Ajouter</button></div>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ═══════════════════════════════════════════
+     FIREBASE  (ESM via CDN — compatible GitHub Pages)
+════════════════════════════════════════════ -->
+<script type="module">
+import { initializeApp }           from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+                                   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot }
+                                   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// ── CONFIG ──────────────────────────────────
+const firebaseConfig = {
+  apiKey:            "AIzaSyDuo7gW2tEF8Vfvw41gOfnGQh6vEuD6Wys",
+  authDomain:        "studyflow-7995b.firebaseapp.com",
+  projectId:         "studyflow-7995b",
+  storageBucket:     "studyflow-7995b.firebasestorage.app",
+  messagingSenderId: "328131806666",
+  appId:             "1:328131806666:web:3833f1f56b2622ccdcbb33"
+};
+
+const fbApp = initializeApp(firebaseConfig);
+const auth  = getAuth(fbApp);
+const db    = getFirestore(fbApp);
+
+// ── RUNTIME STATE ───────────────────────────
+let currentUser   = null;
+let unsubFirestore = null;
+let isSyncing     = false;
+
+let state = {
+  subjects: [], assignments: [], revisionLog: [],
+  rotationIndex: 0, rotationStart: null
+};
+
+// ── HELPERS ─────────────────────────────────
+const today     = () => new Date().toISOString().slice(0,10);
+const fmtDate   = d => { const [y,m,day]=d.split('-'); const mo=['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc']; return `${day} ${mo[+m-1]} ${y}`; };
+const daysUntil = d => Math.ceil((new Date(d)-new Date(today()))/86400000);
+const byId      = id => state.subjects.find(s=>s.id===id);
+const genId     = () => Math.random().toString(36).slice(2,10);
+const userRef   = () => doc(db,'users',currentUser.uid,'data','studyflow');
+
+// ── FIRESTORE SAVE ──────────────────────────
+async function save() {
+  if (!currentUser) return;
+  setSyncing(true);
+  try { await setDoc(userRef(), state); }
+  catch(e) { showToast('❌ Erreur de sauvegarde','error'); console.error(e); }
+  finally  { setSyncing(false); }
+}
+
+// ── FIRESTORE LOAD (once) ───────────────────
+async function loadData() {
+  const snap = await getDoc(userRef());
+  if (snap.exists()) state = { ...state, ...snap.data() };
+}
+
+// ── REAL-TIME LISTENER ──────────────────────
+function startListener() {
+  if (unsubFirestore) unsubFirestore();
+  unsubFirestore = onSnapshot(userRef(), snap => {
+    if (snap.exists() && !isSyncing) {
+      state = { ...state, ...snap.data() };
+      renderPage(activePage());
+    }
+  });
+}
+
+function setSyncing(v) {
+  isSyncing = v;
+  const dot = document.getElementById('syncDot');
+  const lbl = document.getElementById('syncLabel');
+  if (!dot) return;
+  if (v) { dot.classList.add('syncing');    lbl.textContent='Synchronisation…'; }
+  else   { dot.classList.remove('syncing'); lbl.textContent='Synchronisé ✓'; }
+}
+
+// ── AUTH ─────────────────────────────────────
+window.signInWithGoogle = async () => {
+  document.getElementById('authNote').style.display='block';
+  try { await signInWithPopup(auth, new GoogleAuthProvider()); }
+  catch(e) {
+    document.getElementById('authNote').style.display='none';
+    showToast('❌ Connexion annulée ou bloquée','error');
+  }
+};
+
+window.doSignOut = async () => {
+  if (!confirm('Se déconnecter ?')) return;
+  if (unsubFirestore) { unsubFirestore(); unsubFirestore=null; }
+  await signOut(auth);
+};
+
+onAuthStateChanged(auth, async user => {
+  if (user) {
+    currentUser = user;
+    document.getElementById('authScreen').classList.add('hidden');
+    document.getElementById('loadingOverlay').classList.remove('hidden');
+    await loadData();
+    renderUserBar(user);
+    document.getElementById('loadingOverlay').classList.add('hidden');
+    startListener();
+    init();
+  } else {
+    currentUser = null;
+    state = { subjects:[], assignments:[], revisionLog:[], rotationIndex:0, rotationStart:null };
+    if (unsubFirestore) { unsubFirestore(); unsubFirestore=null; }
+    document.getElementById('authScreen').classList.remove('hidden');
+    document.getElementById('loadingOverlay').classList.add('hidden');
+  }
+});
+
+function renderUserBar(user) {
+  const init = (user.displayName||user.email||'?')[0].toUpperCase();
+  document.getElementById('userBar').innerHTML = `
+    ${user.photoURL
+      ? `<img class="user-avatar" src="${user.photoURL}" referrerpolicy="no-referrer" alt="">`
+      : `<div class="user-placeholder">${init}</div>`}
+    <div class="user-info">
+      <div class="user-name">${user.displayName||'Utilisateur'}</div>
+      <div class="user-email">${user.email}</div>
+    </div>
+    <button class="btn-signout" onclick="doSignOut()" title="Se déconnecter">⏻</button>`;
+}
+
+// ══════════════════════════════════════════════
+//  APP LOGIC
+// ══════════════════════════════════════════════
+
+// ROTATION
+function getSubjectForDate(dateStr) {
+  if (!state.subjects.length) return null;
+  if (!state.rotationStart) { state.rotationStart=today(); state.rotationIndex=0; }
+  const diff = Math.floor((new Date(dateStr)-new Date(state.rotationStart))/86400000);
+  const n    = state.subjects.length;
+  return state.subjects[((state.rotationIndex+diff)%n+n)%n];
+}
+function advanceRotation() {
+  if (!state.subjects.length) return;
+  state.rotationIndex=(state.rotationIndex+1)%state.subjects.length;
+  const d=new Date(state.rotationStart); d.setDate(d.getDate()+1);
+  state.rotationStart=d.toISOString().slice(0,10);
+}
+const getTodayLog  = () => state.revisionLog.find(l=>l.date===today()&&l.type!=='exception');
+const getTodayExc  = () => state.revisionLog.filter(l=>l.date===today()&&l.type==='exception');
+
+// NAV
+function activePage() {
+  for (const p of ['today','schedule','calendar','subjects','assignments','history'])
+    if (document.getElementById('page-'+p)?.classList.contains('active')) return p;
+  return 'today';
+}
+window.showPage = id => {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  const pages=['today','schedule','calendar','subjects','assignments','history'];
+  document.querySelectorAll('.nav-item')[pages.indexOf(id)]?.classList.add('active');
+  closeSidebar(); renderPage(id);
+};
+function renderPage(id) {
+  ({today:renderToday,schedule:renderSchedule,calendar:renderCalendar,
+    subjects:renderSubjects,assignments:renderAssignments,history:renderHistory}[id]||renderToday)();
+}
+
+// TODAY
+function renderToday() {
+  document.getElementById('todayDateLabel').textContent=fmtDate(today());
+  document.getElementById('sidebarDate').textContent=fmtDate(today());
+  renderAlerts(); renderTodaySubject(); renderTodayAssignments();
+}
+function renderAlerts() {
+  let h='';
+  state.revisionLog.filter(l=>l.status==='missed').forEach(m=>{
+    const s=byId(m.subjectId);
+    h+=`<div class="alert"><span class="alert-icon">⚠️</span><div>Révision manquée le <strong>${fmtDate(m.date)}</strong> — <strong>${s?.name||'?'}</strong></div></div>`;
+  });
+  state.assignments.filter(a=>!a.completed&&daysUntil(a.date)<=3&&daysUntil(a.date)>=0).forEach(a=>{
+    const du=daysUntil(a.date),s=byId(a.subjectId);
+    h+=`<div class="alert alert-warn"><span class="alert-icon">⏰</span><div><strong>${a.title}</strong> (${s?.code||'?'}) — ${du===0?"Aujourd'hui !":du+' jour(s)'}</div></div>`;
+  });
+  state.assignments.filter(a=>!a.completed&&daysUntil(a.date)<0).forEach(a=>{
+    const s=byId(a.subjectId);
+    h+=`<div class="alert"><span class="alert-icon">🚨</span><div><strong>${a.title}</strong> (${s?.code||'?'}) — En retard de ${Math.abs(daysUntil(a.date))} jour(s) !</div></div>`;
+  });
+  document.getElementById('alertsContainer').innerHTML=h;
+}
+function renderTodaySubject() {
+  const block=document.getElementById('todaySubjectBlock');
+  if (!state.subjects.length) {
+    block.innerHTML=`<div class="card" style="text-align:center;padding:40px;"><div style="font-size:2rem;margin-bottom:12px">📚</div><div style="font-family:'Syne',sans-serif;font-weight:700;font-size:1rem;color:var(--muted2);">Aucune matière configurée</div><div style="color:var(--muted);font-size:0.85rem;margin:8px 0 16px;">Commence par ajouter tes matières</div><button class="btn btn-primary" onclick="showPage('subjects')">Ajouter des matières</button></div>`;
+    return;
+  }
+  const log=getTodayLog(), excs=getTodayExc(), subj=getSubjectForDate(today());
+  let h=`<div class="today-subject-card" style="border-top-color:${subj?.color||'var(--accent)'}">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+      <span class="badge badge-accent">Révision planifiée</span>
+      ${log?(log.status==='done'?'<span class="badge badge-teal">✓ Révisé</span>':'<span class="badge badge-red">✗ Manqué</span>'):'<span class="badge badge-muted">En attente</span>'}
+    </div>
+    <div class="today-subject-name">${subj?.name||'—'}</div>
+    <div class="today-subject-meta">${subj?.code||''} · Rotation quotidienne</div>`;
+  if (log) h+=`<div style="margin-top:12px;font-size:0.85rem;color:var(--muted2);">${log.chapter?`📖 ${log.chapter}`:''}${log.notes?`<br>💬 ${log.notes}`:''}</div>`;
+  if (!log) h+=`<div class="today-actions"><button class="btn btn-success" onclick="openCheckinModal('${subj?.id}','planned')">✓ Marquer comme révisé</button><button class="btn btn-danger" onclick="markMissedDirect('${subj?.id}')">✗ Pas révisé aujourd'hui</button></div>`;
+  h+=`</div>`;
+  excs.forEach(ex=>{ const s=byId(ex.subjectId); h+=`<div class="today-subject-card" style="border-top-color:${s?.color||'var(--accent2)'}"><div style="margin-bottom:6px"><span class="badge badge-gold">Exception</span></div><div class="today-subject-name">${s?.name||'?'}</div><div class="today-subject-meta">${ex.chapter||''}</div>${ex.notes?`<div style="margin-top:8px;font-size:0.82rem;color:var(--muted2);">💬 ${ex.notes}</div>`:''}</div>`; });
+  block.innerHTML=h;
+}
+function renderTodayAssignments() {
+  const block=document.getElementById('todayAssignments');
+  const up=state.assignments.filter(a=>!a.completed&&daysUntil(a.date)<=7&&daysUntil(a.date)>=-1);
+  if (!up.length){block.innerHTML='';return;}
+  let h=`<div class="card"><div class="card-title">📝 Travaux à venir (7 jours)</div>`;
+  up.forEach(a=>{const s=byId(a.subjectId);const du=daysUntil(a.date);const ti=a.type==='exam'?'🎓':a.type==='quiz'?'❓':'📝';h+=`<div class="assignment-item"><div class="assignment-info"><div class="assignment-name">${ti} ${a.title}</div><div class="assignment-meta">${s?.code||'?'} · ${fmtDate(a.date)} (${du<0?'en retard':du===0?"auj.":du+' j.'})</div></div><button class="btn btn-success btn-sm" onclick="logAssignmentWork('${a.id}')">+Session</button></div>`;});
+  h+=`</div>`;block.innerHTML=h;
+}
+
+// SCHEDULE
+function renderSchedule() {
+  const list=document.getElementById('scheduleList');
+  if (!state.subjects.length){list.innerHTML=`<div style="color:var(--muted);font-size:0.85rem;padding:20px;text-align:center;">Aucune matière.</div>`;return;}
+  let h='';
+  for(let i=0;i<21;i++){
+    const d=new Date();d.setDate(d.getDate()+i);
+    const dstr=d.toISOString().slice(0,10);
+    const subj=getSubjectForDate(dstr);
+    const log=state.revisionLog.find(l=>l.date===dstr&&l.type!=='exception');
+    const cls=i===0?'today-item':log?.status==='done'?'done-item':log?.status==='missed'?'missed-item':'';
+    h+=`<div class="schedule-item ${cls}"><div class="schedule-date">${i===0?'Auj.':fmtDate(dstr)}</div><div style="flex:1"><div class="schedule-subject">${subj?.name||'—'}</div>${log?.chapter?`<div style="font-size:0.8rem;color:var(--muted2);font-style:italic;">📖 ${log.chapter}</div>`:''}</div><div style="display:flex;gap:6px;align-items:center;">${log?(log.status==='done'?'<span class="badge badge-teal">✓</span>':'<span class="badge badge-red">✗</span>'):''}<span class="badge" style="background:${subj?.color||'var(--accent)'}22;color:${subj?.color||'var(--accent)'}">${subj?.code||''}</span></div></div>`;
+  }
+  list.innerHTML=h;
+}
+
+// CALENDAR
+let calYear,calMonth;
+function renderCalendar(){const n=new Date();if(!calYear){calYear=n.getFullYear();calMonth=n.getMonth();}buildCal();}
+window.calPrev=()=>{calMonth--;if(calMonth<0){calMonth=11;calYear--;}buildCal();};
+window.calNext=()=>{calMonth++;if(calMonth>11){calMonth=0;calYear++;}buildCal();};
+function buildCal(){
+  const months=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+  document.getElementById('calMonthLabel').textContent=`${months[calMonth]} ${calYear}`;
+  const first=new Date(calYear,calMonth,1).getDay(),last=new Date(calYear,calMonth+1,0).getDate(),t=today();
+  let h=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'].map(d=>`<div class="cal-day-label">${d}</div>`).join('');
+  for(let i=0;i<first;i++) h+=`<div class="cal-day empty"></div>`;
+  for(let d=1;d<=last;d++){
+    const dstr=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const log=state.revisionLog.find(l=>l.date===dstr&&l.type!=='exception');
+    const subj=getSubjectForDate(dstr);
+    const hasA=state.assignments.some(a=>a.date===dstr);
+    let cls=dstr===t?'today':'';
+    if(log?.status==='done') cls+=' done';
+    if(log?.status==='missed') cls+=' missed';
+    if(log||hasA) cls+=' has-event';
+    h+=`<div class="cal-day ${cls}" onclick="showCalDay('${dstr}')"><span>${d}</span><span class="cal-day-subj">${subj?.code||''}</span></div>`;
+  }
+  document.getElementById('calGrid').innerHTML=h;
+  document.getElementById('calDayDetail').style.display='none';
+}
+window.showCalDay=dstr=>{
+  const subj=getSubjectForDate(dstr);
+  const log=state.revisionLog.find(l=>l.date===dstr&&l.type!=='exception');
+  const excs=state.revisionLog.filter(l=>l.date===dstr&&l.type==='exception');
+  const asgns=state.assignments.filter(a=>a.date===dstr);
+  document.getElementById('calDayDetailTitle').textContent=fmtDate(dstr);
+  let h='';
+  if(subj) h+=`<div style="margin-bottom:12px"><div style="font-family:'Syne',sans-serif;font-weight:700;font-size:0.9rem;">📚 ${subj.name}</div>${log?`<div style="font-size:0.82rem;color:var(--muted2);margin-top:4px;">${log.status==='done'?'<span class="badge badge-teal">Révisé</span>':'<span class="badge badge-red">Manqué</span>'}${log.chapter?' · '+log.chapter:''}</div>`:'<div style="font-size:0.82rem;color:var(--muted2);margin-top:4px;">Non renseigné</div>'}</div>`;
+  excs.forEach(ex=>{const s=byId(ex.subjectId);h+=`<div style="margin-bottom:8px"><span class="badge badge-gold">Exception</span> ${s?.name||'?'} — ${ex.chapter||''}</div>`;});
+  asgns.forEach(a=>{const s=byId(a.subjectId);h+=`<div style="margin-bottom:8px"><span class="badge ${a.completed?'badge-teal':'badge-red'}">${a.type==='exam'?'Examen':a.type==='quiz'?'Quiz':'TP'}</span> ${a.title} (${s?.code||'?'}) ${a.completed?'✓':''}</div>`;});
+  if(!h) h=`<div style="color:var(--muted);font-size:0.85rem;">Aucune activité.</div>`;
+  document.getElementById('calDayDetailContent').innerHTML=h;
+  document.getElementById('calDayDetail').style.display='block';
+};
+
+// SUBJECTS
+const COLORS=['#7c6af7','#f7c26a','#6af7c8','#f76a7c','#6ab8f7','#c26af7','#f76ab8'];
+function renderSubjects(){
+  const grid=document.getElementById('subjectsGrid');
+  if (!state.subjects.length){grid.innerHTML=`<div style="color:var(--muted);font-size:0.85rem;padding:20px;">Aucune matière. Clique sur + Ajouter.</div>`;return;}
+  grid.innerHTML=state.subjects.map((s,i)=>{
+    const done=state.revisionLog.filter(l=>l.subjectId===s.id&&l.status==='done').length;
+    const tot=state.revisionLog.filter(l=>l.subjectId===s.id).length;
+    const pct=tot?Math.round(done/tot*100):0;
+    return `<div class="subject-card"><div class="subject-card-accent" style="background:${s.color}"></div><div class="subject-name">${s.name}</div><div class="subject-stats">${s.code} · Position ${i+1} dans la rotation</div><div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${s.color}"></div></div><div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;"><span class="badge badge-muted">${done}/${tot||0} révisé(s)</span><button class="btn btn-danger btn-sm" onclick="removeSubject('${s.id}')">Retirer</button></div></div>`;
+  }).join('');
+}
+window.openSubjectModal=()=>{document.getElementById('subjectName').value='';document.getElementById('subjectCode').value='';document.getElementById('subjectColor').value=COLORS[state.subjects.length%COLORS.length];openModal('subjectModal');};
+window.addSubject=async()=>{
+  const name=document.getElementById('subjectName').value.trim();
+  const code=document.getElementById('subjectCode').value.trim();
+  const color=document.getElementById('subjectColor').value;
+  if(!name)return showToast('⚠️ Nom requis','warn');
+  state.subjects.push({id:genId(),name,code:code||name.slice(0,4).toUpperCase(),color});
+  if(!state.rotationStart){state.rotationStart=today();state.rotationIndex=0;}
+  await save();closeModal('subjectModal');renderSubjects();showToast('📚 Matière ajoutée !','success');
+};
+window.removeSubject=async id=>{
+  if(!confirm('Supprimer cette matière ?'))return;
+  state.subjects=state.subjects.filter(s=>s.id!==id);
+  await save();renderSubjects();showToast('Matière retirée','info');
+};
+
+// ASSIGNMENTS
+function renderAssignments(){
+  populateSelects();
+  const list=document.getElementById('assignmentList');
+  const sorted=[...state.assignments].sort((a,b)=>a.date.localeCompare(b.date));
+  if(!sorted.length){list.innerHTML=`<div style="color:var(--muted);padding:20px;text-align:center;">Aucun devoir/examen.</div>`;return;}
+  const ti=t=>t==='exam'?'🎓':t==='quiz'?'❓':'📝';
+  const tl=t=>t==='exam'?'Examen':t==='quiz'?'Quiz':'TP/Devoir';
+  list.innerHTML=sorted.map(a=>{
+    const s=byId(a.subjectId),du=daysUntil(a.date);
+    return `<div class="assignment-item" style="opacity:${a.completed?.6:1}"><div style="font-size:1.4rem">${ti(a.type)}</div><div class="assignment-info"><div class="assignment-name">${a.title} ${a.completed?'<span class="badge badge-teal">✓ Terminé</span>':''}</div><div class="assignment-meta">${s?.name||'?'} · ${tl(a.type)} · ${fmtDate(a.date)} ${du<0?'<span class="badge badge-red">En retard</span>':du<=3?`<span class="badge badge-gold">${du===0?"Auj.":du+' j.'}</span>`:''}</div>${a.notes?`<div style="font-size:0.78rem;color:var(--muted2);margin-top:3px;font-style:italic;">${a.notes}</div>`:''}${a.progress?.length?`<div style="font-size:0.78rem;color:var(--accent3);margin-top:3px;">Dernière session : ${a.progress.slice(-1)[0]}</div>`:''}</div><div class="assignment-actions">${!a.completed?`<button class="btn btn-success btn-sm" onclick="completeAssignment('${a.id}')">✓ Achevé</button><button class="btn btn-secondary btn-sm" onclick="logAssignmentWork('${a.id}')">+Session</button>`:''}<button class="btn btn-danger btn-sm" onclick="removeAssignment('${a.id}')">🗑</button></div></div>`;
+  }).join('');
+}
+window.openAssignmentModal=()=>{populateSelects();document.getElementById('assignTitle').value='';document.getElementById('assignDate').value=today();document.getElementById('assignNotes').value='';openModal('assignmentModal');};
+window.addAssignment=async()=>{
+  const title=document.getElementById('assignTitle').value.trim();
+  const type=document.getElementById('assignType').value;
+  const subjectId=document.getElementById('assignSubject').value;
+  const date=document.getElementById('assignDate').value;
+  const notes=document.getElementById('assignNotes').value.trim();
+  if(!title||!date)return showToast('⚠️ Titre et date requis','warn');
+  state.assignments.push({id:genId(),title,type,subjectId,date,notes,completed:false,progress:[]});
+  await save();closeModal('assignmentModal');renderAssignments();showToast('📝 Ajouté !','success');
+};
+window.completeAssignment=async id=>{const a=state.assignments.find(a=>a.id===id);if(a){a.completed=true;await save();renderAssignments();showToast('🎉 Terminé !','success');}};
+window.logAssignmentWork=async id=>{
+  const note=prompt('Note pour cette session (ex: "Chapitres 1-3 faits") :');
+  if(note===null)return;
+  const a=state.assignments.find(a=>a.id===id);
+  if(a){a.progress.push(`${fmtDate(today())}: ${note}`);await save();renderAssignments();showToast('Session enregistrée','success');}
+};
+window.removeAssignment=async id=>{if(!confirm('Supprimer ?'))return;state.assignments=state.assignments.filter(a=>a.id!==id);await save();renderAssignments();};
+
+// CHECK-IN
+let pendingCheckin=null;
+window.openCheckinModal=(subjectId,type)=>{
+  pendingCheckin={subjectId,type};
+  document.getElementById('checkinModalTitle').textContent=`Révision — ${byId(subjectId)?.name||''}`;
+  document.getElementById('checkinChapter').value='';
+  document.getElementById('checkinNotes').value='';
+  openModal('checkinModal');
+};
+window.markDone=async()=>{
+  if(!pendingCheckin)return;
+  const chapter=document.getElementById('checkinChapter').value.trim();
+  const notes=document.getElementById('checkinNotes').value.trim();
+  const log={id:genId(),date:today(),subjectId:pendingCheckin.subjectId,chapter,notes,status:'done',type:pendingCheckin.type||'planned'};
+  state.revisionLog=state.revisionLog.filter(l=>!(l.date===today()&&l.type===log.type));
+  state.revisionLog.push(log);
+  if(log.type==='planned') advanceRotation();
+  await save();closeModal('checkinModal');renderToday();showToast('✓ Révision enregistrée !','success');
+};
+window.markMissed=async()=>{
+  if(!pendingCheckin)return;
+  const log={id:genId(),date:today(),subjectId:pendingCheckin.subjectId,chapter:'',notes:'Non révisé',status:'missed',type:'planned'};
+  state.revisionLog=state.revisionLog.filter(l=>!(l.date===today()&&l.type==='planned'));
+  state.revisionLog.push(log);
+  await save();closeModal('checkinModal');renderToday();showToast('Manquée','warn');
+};
+window.markMissedDirect=id=>{pendingCheckin={subjectId:id,type:'planned'};markMissed();};
+
+// EXCEPTION
+window.openExceptionModal=()=>{populateSelects();document.getElementById('exceptionDate').value=today();document.getElementById('exceptionChapter').value='';document.getElementById('exceptionNotes').value='';openModal('exceptionModal');};
+window.addException=async()=>{
+  const subjectId=document.getElementById('exceptionSubject').value;
+  const date=document.getElementById('exceptionDate').value;
+  const chapter=document.getElementById('exceptionChapter').value.trim();
+  const notes=document.getElementById('exceptionNotes').value.trim();
+  if(!subjectId||!date)return showToast('⚠️ Matière et date requises','warn');
+  state.revisionLog.push({id:genId(),date,subjectId,chapter,notes,status:'done',type:'exception'});
+  await save();closeModal('exceptionModal');renderToday();showToast('Exception ajoutée !','success');
+};
+
+// HISTORY
+function renderHistory(){
+  const done=state.revisionLog.filter(l=>l.status==='done').length;
+  const missed=state.revisionLog.filter(l=>l.status==='missed').length;
+  document.getElementById('statsRow').innerHTML=`
+    <div class="stat-box"><div class="stat-num" style="color:var(--accent3)">${done}</div><div class="stat-label">Révisé</div></div>
+    <div class="stat-box"><div class="stat-num" style="color:var(--danger)">${missed}</div><div class="stat-label">Manqué</div></div>
+    <div class="stat-box"><div class="stat-num">${state.revisionLog.length}</div><div class="stat-label">Total</div></div>
+    <div class="stat-box"><div class="stat-num" style="color:var(--accent2)">${calcStreak()}</div><div class="stat-label">Jours consécutifs</div></div>`;
+  const sorted=[...state.revisionLog].sort((a,b)=>b.date.localeCompare(a.date));
+  document.getElementById('histBody').innerHTML=sorted.map(l=>{
+    const s=byId(l.subjectId);
+    return `<tr><td style="font-family:'DM Mono',monospace;font-size:0.75rem;color:var(--muted2)">${fmtDate(l.date)}</td><td><strong>${s?.name||'?'}</strong></td><td style="font-style:italic;color:var(--muted2)">${l.chapter||'—'}</td><td>${l.status==='done'?'<span class="badge badge-teal">✓</span>':'<span class="badge badge-red">✗</span>'} ${l.type==='exception'?'<span class="badge badge-gold">Exception</span>':''}</td><td style="font-size:0.8rem;color:var(--muted2)">${l.notes||'—'}</td></tr>`;
+  }).join('')||`<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">Aucun historique</td></tr>`;
+}
+function calcStreak(){let s=0,d=new Date();while(s<365){const ds=d.toISOString().slice(0,10);if(!state.revisionLog.find(l=>l.date===ds&&l.status==='done'))break;s++;d.setDate(d.getDate()-1);}return s;}
+
+// MODAL UTILS
+window.openModal=id=>document.getElementById(id).classList.add('open');
+window.closeModal=id=>document.getElementById(id).classList.remove('open');
+document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
+function populateSelects(){['assignSubject','exceptionSubject'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=state.subjects.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');});}
+
+// TOAST
+window.showToast=(msg,type='info')=>{
+  const c=document.getElementById('toastContainer');
+  const t=document.createElement('div');t.className='toast';
+  t.style.borderLeft=`3px solid ${{success:'var(--accent3)',warn:'var(--accent2)',info:'var(--muted2)',error:'var(--danger)'}[type]}`;
+  t.textContent=msg;c.appendChild(t);setTimeout(()=>t.remove(),3100);
+};
+
+// SIDEBAR MOBILE
+window.toggleSidebar=()=>{document.getElementById('sidebar').classList.toggle('open');document.getElementById('sidebarOverlay').classList.toggle('open');};
+function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sidebarOverlay').classList.remove('open');}
+
+// INIT (called after auth)
+function init(){
+  document.getElementById('sidebarDate').textContent=fmtDate(today());
+  renderToday();
+  if('Notification'in window&&Notification.permission==='default') Notification.requestPermission();
+}
+</script>
+</body>
+</html>
